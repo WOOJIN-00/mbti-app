@@ -1,0 +1,541 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MBTI 판정 돋보기</title>
+  <meta name="description" content="글을 입력하고 검사하면 MBTI를 보여 주고, 그 결과가 글의 주제와 길이에 따라 얼마나 흔들리는지 알려 주는 앱.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gothic+A1:wght@500;700;900&display=swap">
+  <style>
+    :root {
+      --bg: #f7f3ee; --card: #ffffff; --ink: #141414; --muted: #66625c; --line: #141414; --soft: #ece6de;
+      --c-E: #ff6a3d; --c-I: #9a7bea; --c-S: #19a974; --c-N: #3d6dff;
+      --c-T: #ffc93c; --c-F: #ff8cc6; --c-J: #ef4b4b; --c-P: #4fd1c5;
+      --shape: #fff7ea; --warn: #d6336c;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) { --bg: #121212; --card: #1d1d1d; --ink: #f5f1ea; --muted: #aaa49b; --line: #f5f1ea; --soft: #2a2a2a; --shape: #fff7ea; --warn: #ff7aa8; }
+    }
+    :root[data-theme="dark"] { --bg: #121212; --card: #1d1d1d; --ink: #f5f1ea; --muted: #aaa49b; --line: #f5f1ea; --soft: #2a2a2a; --shape: #fff7ea; --warn: #ff7aa8; }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0; background: var(--bg); color: var(--ink);
+      font-family: "Gothic A1", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif;
+      font-size: 16px; line-height: 1.65; word-break: keep-all; overflow-wrap: anywhere;
+    }
+    .heavy { font-weight: 900; letter-spacing: -0.02em; }
+
+    .screen { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px 16px; text-align: center; animation: pop .35s ease; }
+    .screen[hidden] { display: none; }
+    @keyframes pop { from { opacity: 0; transform: scale(.98); } to { opacity: 1; transform: none; } }
+    @media (prefers-reduced-motion: reduce) { .screen { animation: none; } .tile { transition: none !important; } }
+
+    .card { width: min(760px, 100%); background: var(--card); border: 2.5px solid var(--line); border-radius: 18px; padding: 30px 26px; box-shadow: 8px 8px 0 var(--line); }
+
+    button { font: inherit; color: var(--ink); background: none; border: 0; cursor: pointer; }
+    .btn {
+      font-weight: 900; font-size: 18px; border: 2.5px solid var(--line); border-radius: 999px; padding: 10px 30px;
+      background: var(--card); box-shadow: 4px 4px 0 var(--line); transition: transform .08s, box-shadow .08s;
+    }
+    .btn:hover { transform: translate(-1px, -1px); box-shadow: 5px 5px 0 var(--line); }
+    .btn:active { transform: translate(3px, 3px); box-shadow: 1px 1px 0 var(--line); }
+    .btn.go { background: var(--c-T); color: #141414; }
+    .link { font-size: 14px; font-weight: 700; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; padding: 6px 8px; }
+    .link:hover { color: var(--ink); }
+    .actions { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px 12px; margin-top: 24px; }
+
+    /* ---------- 글자 타일 (도형 패턴) ---------- */
+    .tiles { display: grid; grid-template-columns: repeat(4, var(--ts, 72px)); gap: 10px; justify-content: center; }
+    .tile { width: var(--ts, 72px); aspect-ratio: 1; border-radius: 14px; border: 2.5px solid var(--line); position: relative; overflow: hidden; background: var(--soft); transition: background .25s, transform .25s; }
+    .tile svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+    .tile .letter {
+      position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: calc(var(--ts, 72px) * .52); color: #141414;
+      -webkit-text-stroke: calc(var(--ts, 72px) * .07) #fff7ea; paint-order: stroke fill;
+    }
+    .tile.off svg { opacity: 0; }
+    .tile.off { background: var(--soft); }
+
+    /* 1. 시작 */
+    #start { position: relative; gap: 0; }
+    #start .tiles { --ts: clamp(54px, 13vw, 92px); grid-template-columns: repeat(4, var(--ts)); margin-bottom: 30px; }
+    #start .tile:nth-child(odd) { transform: rotate(-3deg); }
+    #start .tile:nth-child(even) { transform: rotate(2deg); }
+    h1 { font-weight: 900; font-size: clamp(40px, 8.5vw, 72px); line-height: 1.1; margin: 0 0 30px; letter-spacing: -0.03em; }
+    h1 .u { box-shadow: inset 0 -.28em 0 var(--c-F); }
+    .paper-line { position: absolute; bottom: 20px; left: 16px; right: 16px; font-size: 12.5px; color: var(--muted); margin: 0; }
+
+    /* 2. 글 입력 */
+    .topics { text-align: left; margin-bottom: 18px; }
+    .topics-q { font-weight: 900; font-size: 17px; margin: 0 0 8px; }
+    .topics-q small { font-weight: 500; font-size: 13px; color: var(--muted); margin-left: 6px; }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+    .chip {
+      font-size: 14px; font-weight: 700; padding: 5px 14px; border-radius: 999px; border: 2px solid var(--line);
+      background: var(--card); color: var(--ink); transition: transform .08s;
+    }
+    .chip:hover { transform: translateY(-1px); }
+    .chip[aria-checked="true"] { color: #141414; box-shadow: 3px 3px 0 var(--line); }
+    .coach { text-align: left; margin-top: 14px; border: 2.5px solid var(--line); border-radius: 14px; padding: 12px 14px; background: var(--bg); }
+    .coach-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; font-size: 13.5px; color: var(--muted); }
+    .coach-head b { font-weight: 900; font-size: 15px; color: var(--ink); }
+    .axes4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+    .ax { border: 2px solid var(--line); border-radius: 10px; padding: 6px 8px; font-size: 12.5px; line-height: 1.35; background: var(--card); }
+    .ax b { display: block; font-weight: 900; font-size: 14px; }
+    .ax.none { opacity: .6; }
+    .ax.weak { background: var(--c-T); color: #141414; }
+    .ax.ok { background: var(--c-S); color: #fff; }
+    .ask { margin-top: 10px; padding-top: 10px; border-top: 2px dashed var(--soft); }
+    .ask-lab { font-size: 12.5px; font-weight: 700; color: var(--muted); }
+    .ask p { margin: 2px 0 0; font-weight: 700; font-size: 15px; }
+    .ask .link { padding: 2px 0; }
+    @media (max-width: 600px) { .axes4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    .example { text-align: left; margin-top: 16px; border: 2.5px dashed var(--line); border-radius: 14px; padding: 14px 16px; background: var(--bg); }
+    .ex-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+    .ex-head b { font-weight: 900; }
+    .ex-head span { font-size: 12.5px; color: var(--muted); }
+    .ex-text { margin: 8px 0 4px; font-size: 15px; user-select: text; }
+    .ex-foot { display: flex; justify-content: space-between; align-items: center; font-size: 12.5px; color: var(--muted); }
+    .field { text-align: left; }
+    .field + .field { margin-top: 20px; }
+    .field .lab { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; }
+    .field .lab .name { font-weight: 900; font-size: 17px; }
+    .field .lab .name small { font-weight: 500; color: var(--muted); font-size: 13px; }
+    textarea {
+      width: 100%; min-height: 160px; resize: vertical; font: inherit; font-size: 17px; color: var(--ink); background: var(--bg);
+      border: 2.5px solid var(--line); border-radius: 12px; padding: 12px 14px; outline: none;
+    }
+    textarea:focus { box-shadow: 4px 4px 0 var(--c-N); }
+    textarea::placeholder { color: var(--muted); font-weight: 700; }
+    .len { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+    .pill { font-size: 12px; font-weight: 900; padding: 1px 10px; border-radius: 999px; border: 2px solid var(--line); color: #141414; }
+    .lv1 { background: var(--c-J); } .lv2 { background: var(--c-E); } .lv3 { background: var(--c-T); } .lv4 { background: var(--c-S); }
+    .msg { min-height: 1.6em; margin: 12px 0 0; font-size: 14px; font-weight: 700; color: var(--warn); }
+
+    /* 3. 검사 중 */
+    #checking .tiles { --ts: clamp(48px, 11vw, 76px); margin-bottom: 30px; }
+    .checking-text { font-weight: 900; font-size: clamp(30px, 6vw, 44px); margin: 0; }
+    .dots::after { content: ""; animation: dots 1.2s steps(4) infinite; }
+    @keyframes dots { 0% { content: ""; } 25% { content: " ."; } 50% { content: " . ."; } 75% { content: " . . ."; } }
+
+    /* 4. 결과 */
+    .res { display: grid; grid-template-columns: auto auto; column-gap: clamp(20px, 5vw, 48px); row-gap: 16px; align-items: center; justify-content: center; }
+    .res .k { font-weight: 900; font-size: clamp(24px, 4.6vw, 34px); text-align: right; }
+    .res .k.sub { font-size: 17px; color: var(--muted); }
+    .res .tiles { --ts: clamp(54px, 11vw, 78px); }
+    .res .tile.x { outline: 3px dashed var(--warn); outline-offset: 4px; }
+    .hold { font-weight: 900; font-size: 28px; color: var(--muted); text-align: left; }
+    .acc { margin-top: 18px; }
+    .summary { max-width: 580px; margin: 16px auto 0; color: var(--muted); font-size: 15px; }
+    .summary b { color: var(--ink); }
+    .summary .hot { color: var(--warn); font-weight: 900; }
+    details { margin-top: 22px; text-align: left; border-top: 2px dashed var(--soft); padding-top: 10px; }
+    summary { cursor: pointer; text-align: center; color: var(--muted); font-weight: 700; font-size: 14px; list-style: none; }
+    summary::-webkit-details-marker { display: none; }
+    summary::after { content: " ▾"; }
+    details[open] summary::after { content: " ▴"; }
+    .detail { font-size: 14px; }
+    .detail h3 { font-weight: 900; font-size: 16px; margin: 20px 0 6px; }
+    .axis { display: grid; grid-template-columns: 22px 1fr 22px; gap: 10px; align-items: center; margin: 8px 0 0; }
+    .axis span { text-align: center; font-weight: 900; color: var(--muted); opacity: .45; }
+    .axis span.on { color: var(--ink); opacity: 1; }
+    .bar2 { position: relative; height: 14px; border: 2px solid var(--line); border-radius: 999px; overflow: hidden; background: var(--bg); }
+    .bar2 i { position: absolute; top: 0; bottom: 0; }
+    .bar2::after { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; background: var(--line); }
+    .muted { color: var(--muted); font-size: 13px; margin-left: 32px; line-height: 1.9; }
+    .word { display: inline-block; font-weight: 700; color: var(--ink); background: var(--soft); border-radius: 6px; padding: 0 6px; margin: 1px 2px; }
+    table { border-collapse: collapse; width: 100%; }
+    td, th { padding: 5px 6px; text-align: left; border-bottom: 1.5px solid var(--soft); font-weight: 500; }
+    th { color: var(--muted); font-size: 13px; }
+    td.t { font-weight: 900; font-size: 17px; letter-spacing: .08em; }
+    td.t .d { color: var(--warn); text-decoration: underline wavy; text-underline-offset: 4px; }
+    .note { font-size: 12.5px; color: var(--muted); margin-top: 20px; }
+    .note p { margin: 0 0 6px; }
+
+    @media (max-width: 600px) {
+      .card { padding: 24px 16px; box-shadow: 5px 5px 0 var(--line); }
+      .res { grid-template-columns: 1fr; justify-items: center; }
+      .res .k { text-align: center; }
+    }
+  </style>
+</head>
+<body>
+  <!-- 1. 시작 -->
+  <section class="screen" id="start">
+    <div class="tiles" id="startTiles" aria-hidden="true"></div>
+    <h1>MBTI <span class="u">판정</span> 돋보기</h1>
+    <button type="button" class="btn go" id="go">시작하기</button>
+    <p class="paper-line">논문 「글만 보고 성격을 맞힐 수 있을까: AI의 MBTI 판정 일관성과 주제 민감성 분석」 · 송우진, 2026</p>
+  </section>
+
+  <!-- 2. 글 입력 -->
+  <section class="screen" id="write" hidden>
+    <div class="card">
+      <div class="topics">
+        <p class="topics-q">어떤 글을 쓸까요? <small>주제를 고르면 입력 칸의 질문이 바뀝니다</small></p>
+        <div class="chips" id="chips" role="radiogroup" aria-label="글 주제"></div>
+      </div>
+      <div class="field">
+        <div class="lab"><span class="name">내 글</span><span class="len" id="len1"></span></div>
+        <textarea id="t1" maxlength="5000" placeholder="글을 입력하세요 . . ."></textarea>
+      </div>
+      <div class="coach" id="coach" aria-live="polite">
+        <div class="coach-head"><b>글 코치</b><span id="goal"></span></div>
+        <div class="axes4" id="axes4"></div>
+        <div class="ask" id="ask">
+          <span class="ask-lab" id="askLab">이어서 써 보세요</span>
+          <p id="askQ"></p>
+          <button type="button" class="link" id="askNext">다른 질문</button>
+        </div>
+      </div>
+      <div class="actions">
+        <button type="button" class="btn go" id="run">검사하기</button>
+      </div>
+      <div class="actions" style="margin-top:10px">
+        <button type="button" class="link" id="showEx" aria-expanded="false" aria-controls="example">예시 글 보여주기</button>
+      </div>
+      <div class="example" id="example" hidden>
+        <div class="ex-head"><b id="exTitle"></b><span>직접 쓴 가상의 예시 글</span></div>
+        <p class="ex-text" id="exText"></p>
+        <div class="ex-foot"><span id="exLen"></span><button type="button" class="link" id="copyEx">복사</button></div>
+      </div>
+      <p class="msg" id="msg" role="alert"></p>
+    </div>
+  </section>
+
+  <!-- 3. 검사 중 -->
+  <section class="screen" id="checking" hidden aria-live="polite">
+    <div class="tiles" id="checkTiles" aria-hidden="true"></div>
+    <p class="checking-text dots">검사 중</p>
+  </section>
+
+  <!-- 4. 결과 -->
+  <section class="screen" id="result" hidden aria-live="polite">
+    <div class="card">
+      <div class="res" id="res"></div>
+      <div class="acc" id="acc"></div>
+      <p class="summary" id="summary"></p>
+      <div class="actions">
+        <button type="button" class="btn" id="again">다시 검사</button>
+        <button type="button" class="link" id="home">처음으로</button>
+      </div>
+      <details>
+        <summary>자세히 보기</summary>
+        <div class="detail" id="detail"></div>
+      </details>
+    </div>
+  </section>
+
+  <script src="judge.js"></script>
+  <script>
+  (function () {
+    "use strict";
+
+    var MAX_LEN = 5000;
+
+    // ---------- 글자 타일: 글자마다 색 + 추상 도형 (얼굴 없음) ----------
+    var SH = "var(--shape)", INK = "#141414";
+    var PATTERN = {
+      E: '<circle cx="50" cy="50" r="30" fill="' + SH + '"/>',
+      I: '<path d="M0 100 A50 50 0 0 1 100 100 Z" fill="' + SH + '"/>',
+      S: '<rect x="20" y="20" width="60" height="60" fill="none" stroke="' + SH + '" stroke-width="12"/>',
+      N: '<path d="M0 0 H100 A100 100 0 0 1 0 100 Z" fill="' + SH + '" opacity=".9"/>',
+      T: '<path d="M0 100 L100 0 L100 100 Z" fill="' + SH + '"/>',
+      F: '<circle cx="30" cy="30" r="14" fill="' + SH + '"/><circle cx="70" cy="30" r="14" fill="' + SH + '"/><circle cx="30" cy="70" r="14" fill="' + SH + '"/><circle cx="70" cy="70" r="14" fill="' + SH + '"/>',
+      J: '<rect x="0" y="14" width="100" height="14" fill="' + SH + '"/><rect x="0" y="43" width="100" height="14" fill="' + SH + '"/><rect x="0" y="72" width="100" height="14" fill="' + SH + '"/>',
+      P: '<path d="M0 60 Q25 35 50 60 T100 60 V100 H0 Z" fill="' + SH + '"/>'
+    };
+    function tile(letter, showLetter, extraCls) {
+      var t = document.createElement("div");
+      t.className = "tile" + (extraCls ? " " + extraCls : "");
+      t.style.background = "var(--c-" + letter + ")";
+      t.innerHTML = '<svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">' + PATTERN[letter] + "</svg>";
+      if (showLetter) { var l = document.createElement("span"); l.className = "letter"; l.textContent = letter; t.appendChild(l); }
+      return t;
+    }
+
+
+    // 판정 엔진은 judge.js
+    var J = window.MBTIJudge;
+    var judge = J.judge, truncationTest = J.truncationTest, textLength = J.textLength, lengthLevel = J.lengthLevel, AXES = J.AXES, LEVEL = J.LEVEL;
+
+    function $(id) { return document.getElementById(id); }
+    function el(tag, cls, text) {
+      var n = document.createElement(tag);
+      if (cls) n.className = cls;
+      if (text != null) n.textContent = text;
+      return n;
+    }
+
+    // ---------- 화면 전환 ----------
+    var ORDER = ["E", "I", "S", "N", "T", "F", "J", "P"];
+    var timer = null;
+    function show(id) {
+      ["start", "write", "checking", "result"].forEach(function (s) { $(s).hidden = s !== id; });
+      window.scrollTo(0, 0);
+    }
+
+    function updateLen(i) {
+      var text = $("t" + i).value;
+      var n = textLength(text);
+      var box = $("len" + i);
+      box.textContent = "";
+      updateCoach(text);
+      if (!n) return;
+      var lv = assess(text).level;
+      box.appendChild(document.createTextNode(n + "자"));
+      box.appendChild(el("span", "pill lv" + lv, "정확도 " + LEVEL[lv]));
+    }
+
+    // ---------- 글 코치: 쓰는 동안 근거가 부족한 지표와 이어 쓸 질문을 알려 준다 ----------
+    // 질문은 고른 주제(TOPICS[].ask)에 맞춘 열린 질문이다.
+    // 질문이 나온 뒤 15자 이상 더 쓰면 그 지표는 "답함"으로 보고 충분으로 친다(특정 단어가 없어도 된다).
+    var ANSWER_CHARS = 15;
+    var askPos = 0, warned = false;
+    var answered = [0, 0, 0, 0];   // 답했다고 본 글 길이(이보다 짧아지면 취소), 0 = 아직 안 답함
+    var askAxis = -1, askBase = 0;
+    // 글 코치·정확도 표시·검사 안내·결과가 모두 이 기준을 쓴다
+    function assess(text) {
+      var j = judge(text), n = j.len;
+      var st = j.axes.map(function (x, i) {
+        if (!x.weak) return "ok";
+        if (answered[i] && n >= answered[i]) return "answered";
+        return x.left.total + x.right.total === 0 ? "none" : "weak";
+      });
+      var weakCount = st.filter(function (v) { return v === "none" || v === "weak"; }).length;
+      var level = j.type ? lengthLevel(n) : 1;
+      if (weakCount >= 2) level = Math.min(level, 2);
+      else if (weakCount === 1) level = Math.min(level, 3);
+      return { j: j, n: n, st: st, weakCount: weakCount, level: level };
+    }
+    function trackAnswer(text) {
+      var n = textLength(text);
+      if (askAxis >= 0 && n - askBase >= ANSWER_CHARS) { answered[askAxis] = askBase + ANSWER_CHARS; askAxis = -1; askPos = 0; }
+    }
+    function needAxes(a) {
+      return a.st.map(function (v, i) { return { i: i, v: v }; })
+        .filter(function (x) { return x.v === "none" || x.v === "weak"; })
+        .sort(function (x, y) { return (x.v === "none" ? 0 : 1) - (y.v === "none" ? 0 : 1); })
+        .map(function (x) { return x.i; });
+    }
+    function updateCoach(text) {
+      var a = assess(text), j = a.j, n = a.n;
+      var goal = n < 40 ? "40자부터 판정할 수 있어요 · 지금 " + n + "자"
+        : n < 120 ? "120자까지 " + (120 - n) + "자 더 쓰면 길이 '보통'"
+        : n < 300 ? "300자까지 " + (300 - n) + "자 더 쓰면 길이 '높음'"
+        : "길이는 충분해요";
+      if (n && a.weakCount) goal += " · 근거가 부족한 지표 " + a.weakCount + "개";
+      $("goal").textContent = goal;
+
+      var box = $("axes4"); box.textContent = "";
+      var label = { none: "근거 없음", weak: "애매함", ok: "충분", answered: "충분 · 답함" };
+      j.axes.forEach(function (x, i) {
+        var s = n ? a.st[i] : "none";
+        var d = el("div", "ax " + (s === "answered" ? "ok" : s));
+        d.appendChild(el("b", null, x.ax.l + " / " + x.ax.r));
+        d.appendChild(document.createTextNode(label[s]));
+        box.appendChild(d);
+      });
+
+      var need = n ? needAxes(a) : [0, 1, 2, 3];
+      $("askLab").textContent = "이어서 써 보세요";
+      if (!need.length) {
+        // 근거는 모두 있어도 글이 짧으면 정확도가 '낮음'이므로, 검사 버튼의 안내와 같은 기준(정확도 단계)으로 말한다
+        askAxis = -1;
+        if (a.level >= 3) {
+          $("askQ").textContent = "네 지표 모두 근거가 있어요. 정확도 '" + LEVEL[a.level] + "', 이대로 검사해 보세요!";
+          $("askNext").hidden = true;
+          return;
+        }
+        $("askLab").textContent = "네 지표 모두 근거가 있어요 · 120자까지 " + Math.max(0, 120 - n) + "자 더 쓰면 정확도 '보통'";
+        $("askNext").hidden = false;
+        $("askQ").textContent = TOPICS[topicIdx].ask[askPos % 4];
+        return;
+      }
+      var k = need[askPos % need.length];
+      if (askAxis !== k) { askAxis = k; askBase = n; }   // 이 질문에 대한 답을 여기서부터 센다
+      $("askNext").hidden = need.length < 2;
+      $("askQ").textContent = TOPICS[topicIdx].ask[k];
+    }
+
+    function run() {
+      var texts = [$("t1").value].filter(function (v) { return v.trim(); });
+      if (!texts.length) { $("msg").textContent = "글을 입력해 주세요."; $("t1").focus(); return; }
+      var results = texts.map(function (t) { return { text: t, j: judge(t) }; });
+      var aa = assess(results[0].text);
+      if (aa.level <= 2 && !warned) {
+        warned = true;
+        var why = aa.n < 120 ? "글이 120자보다 짧아요(지금 " + aa.n + "자)" : "근거가 부족한 지표가 " + aa.weakCount + "개 있어요";
+        $("msg").textContent = "지금 정확도는 '" + LEVEL[aa.level] + "'이에요. " + why + ". 글 코치의 질문에 답하며 조금 더 쓰면 결과가 더 믿을 만해져요. 그대로 검사하려면 한 번 더 누르세요.";
+        $("run").textContent = "그래도 검사하기";
+        return;
+      }
+      $("msg").textContent = "";
+
+      show("checking");
+      var box = $("checkTiles"); box.textContent = "";
+      var tiles = ORDER.map(function (l) { var t = tile(l, false, "off"); box.appendChild(t); return t; });
+      var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      var step = reduce ? 30 : 210, k = 0;
+      clearInterval(timer);
+      timer = setInterval(function () {
+        if (k < tiles.length) { tiles[k].classList.remove("off"); tiles[k].style.background = "var(--c-" + ORDER[k] + ")"; k++; return; }
+        clearInterval(timer);
+        renderResult(results);
+        show("result");
+      }, step);
+      // 꺼진 타일은 회색으로 시작
+      tiles.forEach(function (t) { t.style.background = "var(--soft)"; });
+    }
+
+    // ---------- 결과 ----------
+    function renderResult(results) {
+      var res = $("res"); res.textContent = "";
+      var multi = results.length > 1;
+      var both = multi && results[0].j.type && results[1].j.type;
+      results.forEach(function (r, i) {
+        res.appendChild(el("div", "k" + (i ? " sub" : ""), multi ? (i ? "글 2" : "검사 결과") : "검사 결과"));
+        if (!r.j.type) { res.appendChild(el("div", "hold", "판정 보류")); return; }
+        var row = el("div", "tiles");
+        row.setAttribute("aria-label", "MBTI " + r.j.type);
+        for (var k = 0; k < 4; k++) {
+          var diff = both && results[0].j.type[k] !== results[1].j.type[k];
+          row.appendChild(tile(r.j.type[k], true, diff ? "x" : null));
+        }
+        res.appendChild(row);
+      });
+
+      var acc = $("acc"); acc.textContent = "";
+      results.forEach(function (r, i) {
+        var lvR = assess(r.text).level;
+        var p = el("span", "pill lv" + lvR, (multi ? "글 " + (i + 1) + " " : "") + "정확도 " + LEVEL[lvR]);
+        p.style.margin = "0 4px";
+        acc.appendChild(p);
+      });
+
+      // 판정 보류일 때만 이유를 안내한다
+      var sum = $("summary"); sum.textContent = "";
+      if (!results[0].j.type) sum.textContent = "근거로 쓸 단어를 찾지 못했습니다. 생각·경험·계획이 드러나는 문장을 두세 줄 이상 써 보세요.";
+
+      renderDetail(results);
+      $("result").querySelector("details").open = false;
+    }
+
+    function renderDetail(results) {
+      var d = $("detail"); d.textContent = "";
+      results.forEach(function (r, i) {
+        var pre = results.length > 1 ? "글 " + (i + 1) + " · " : "";
+        d.appendChild(el("h3", null, pre + "지표별 근거"));
+        if (!r.j.type) { d.appendChild(el("p", "muted", "근거 단어가 없습니다.")); return; }
+        r.j.axes.forEach(function (x) {
+          var row = el("div", "axis");
+          row.appendChild(el("span", x.pick === x.ax.l ? "on" : null, x.ax.l));
+          var bar = el("div", "bar2");
+          var s = x.left.total + x.right.total;
+          var lf = el("i"), rf = el("i");
+          lf.style.right = "50%"; lf.style.width = (s ? x.left.total / s * 50 : 0) + "%"; lf.style.background = "var(--c-" + x.ax.l + ")";
+          rf.style.left = "50%"; rf.style.width = (s ? x.right.total / s * 50 : 0) + "%"; rf.style.background = "var(--c-" + x.ax.r + ")";
+          bar.appendChild(lf); bar.appendChild(rf);
+          row.appendChild(bar);
+          row.appendChild(el("span", x.pick === x.ax.r ? "on" : null, x.ax.r));
+          d.appendChild(row);
+          var info = el("div", "muted");
+          info.appendChild(document.createTextNode(x.ax.desc + " · " + x.left.total + " : " + x.right.total + " "));
+          var h = x.pick === x.ax.l ? x.left.hits : x.right.hits;
+          if (h.length) h.slice(0, 6).forEach(function (w) { info.appendChild(el("span", "word", w)); });
+          else if (x.weak) info.appendChild(el("span", null, "· 근거 부족"));
+          d.appendChild(info);
+        });
+      });
+    }
+
+    // ---------- 이벤트 ----------
+    $("go").addEventListener("click", function () { show("write"); $("t1").focus(); });
+    $("run").addEventListener("click", run);
+    $("t1").addEventListener("input", function () {
+      trackAnswer($("t1").value);
+      updateLen(1);
+      if (warned) { warned = false; $("run").textContent = "검사하기"; $("msg").textContent = ""; }
+    });
+    $("askNext").addEventListener("click", function () { askPos++; updateCoach($("t1").value); });
+    $("t1").addEventListener("keydown", function (e) { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) run(); });
+    // ---------- 글 주제와 예시 글 (직접 쓴 가상의 글) ----------
+    var TOPICS = [
+      { name: "취미·일상",
+        ask: ["그 취미를 주로 누구와, 어디에서 하는지 떠올려 써 보세요.", "그 취미를 하는 순간을 자세히 그려 보세요. 무엇이 보이고, 어떤 생각이 드나요?", "그 취미를 계속하게 되는 이유는 무엇인가요?", "보통 언제, 어떻게 그 취미 시간을 갖게 되나요?"], color: "var(--c-F)", q: "요즘 즐겨 하는 취미는 무엇이고, 할 때 기분이 어떤가요? . . .",
+        ex: "요즘 퇴근하고 나면 동네 공원을 한 시간 정도 걷는다. 이어폰으로 좋아하는 노래를 들으며 걷다 보면 하루 동안 쌓인 스트레스가 조금씩 풀린다. 날씨가 좋은 날에는 일부러 먼 길로 돌아가기도 한다. 걷고 나서 마시는 시원한 물 한 잔이 하루 중 가장 행복한 순간이다. 비 오는 날에는 집에서 영화를 보며 쉬는 것도 좋아한다." },
+      { name: "계획·진로",
+        ask: ["목표를 준비하는 동안 누구와 어떻게 지내고 있나요?", "목표를 이룬 뒤의 모습을 그려 보세요. 어떤 하루를 보내고 있을까요?", "그 진로를 고르게 된 계기와 이유를 써 보세요.", "목표를 위해 요즘 어떻게 준비하고 있나요?"], color: "var(--c-T)", q: "앞으로 이루고 싶은 목표와 그 계획을 적어 보세요 . . .",
+        ex: "올해 안에 정보처리기사 자격증을 취득하는 것이 목표다. 이를 위해 평일에는 매일 두 시간씩 필기 문제를 풀고, 주말에는 실기 과목을 정리한다. 시험 한 달 전부터는 기출문제를 세 번 반복할 계획이다. 자격증을 딴 뒤에는 관련 분야 인턴에 지원해 실무 경험을 쌓고 싶다. 계획대로 되지 않는 날도 있겠지만 일정표를 보며 꾸준히 해 나갈 생각이다." },
+      { name: "요즘 고민",
+        ask: ["고민이 생기면 보통 어떻게 마음을 정리하나요?", "그 고민이 시작된 일이나 장면을 떠올려 써 보세요.", "그 고민을 풀려면 무엇이 가장 중요하다고 생각하나요?", "앞으로 그 고민을 어떻게 해 나가고 싶나요?"], color: "var(--c-I)", q: "요즘 마음에 걸리는 고민을 솔직하게 적어 보세요 . . .",
+        ex: "요즘 가장 큰 고민은 내가 정말 원하는 일이 무엇인지 모르겠다는 것이다. 주변 친구들은 하나둘 진로를 정하는데 나만 제자리에 있는 것 같아 마음이 불안하다. 그래도 혼자 생각만 하기보다 이것저것 직접 해 보면서 답을 찾아보려고 한다. 이번 달에는 관심 있던 분야의 강의를 하나 들어 볼 생각이다. 작은 경험이 쌓이면 방향이 보일 거라고 믿는다." },
+      { name: "친구·사람",
+        ask: ["그 사람(친구)들과는 주로 어떻게 시간을 보내나요?", "그 사람과 함께한 기억에 남는 장면을 자세히 써 보세요.", "그 사람과 생각이 달랐던 때가 있다면, 그때 어떻게 했나요?", "그 사람과 만날 때 약속은 보통 어떻게 정해지나요?"], color: "var(--c-E)", q: "소중한 사람이나 기억에 남는 만남을 적어 보세요 . . .",
+        ex: "고등학교 때부터 알고 지낸 친구가 있다. 우리는 성격이 정반대라서 자주 부딪혔지만, 힘든 일이 생기면 가장 먼저 연락하는 사이다. 지난달에도 다 같이 모여 밤새 이야기를 나눴는데, 오랜만에 마음껏 웃을 수 있어서 고마웠다. 앞으로도 서로의 좋은 일과 힘든 일을 함께 나누는 친구로 남고 싶다." },
+      { name: "주말·여행",
+        ask: ["그 시간을 누구와 어떻게 보냈는지 써 보세요.", "가장 기억에 남는 순간을 장면처럼 그려 보세요.", "그곳이나 그 활동을 고른 이유는 무엇이었나요?", "출발 전부터 돌아올 때까지 어떻게 움직였는지 써 보세요."], color: "var(--c-P)", q: "기억에 남는 주말이나 여행 이야기를 적어 보세요 . . .",
+        ex: "지난 주말에는 계획 없이 기차를 타고 바닷가 마을에 다녀왔다. 도착해서 무엇을 할지 정하지 않았는데, 그게 오히려 자유롭고 좋았다. 골목을 걷다가 우연히 들어간 작은 식당의 국수가 정말 맛있었다. 다음에도 갑자기 떠나는 여행을 해 보고 싶다. 사진은 몇 장 못 찍었지만 그날의 바람과 파도 소리는 아직도 기억에 남아 있다." },
+      { name: "나를 소개",
+        ask: ["에너지가 충전되는 순간은 언제인가요?", "나를 잘 보여 주는 최근의 일을 하나 골라 써 보세요.", "중요한 결정을 내렸던 경험과, 그렇게 결정한 이유를 써 보세요.", "평소 하루를 어떻게 보내는지 써 보세요."], color: "var(--c-N)", q: "나를 모르는 사람에게 나를 소개해 보세요 . . .",
+        ex: "저는 한 가지 일을 시작하면 끝까지 해내려고 하는 사람입니다. 처음에는 서툴러도 매일 조금씩 연습하면서 실력을 쌓는 편입니다. 사람들과 함께 일할 때는 먼저 이야기를 듣고, 각자 잘하는 부분을 나눠 맡는 것을 좋아합니다. 쉬는 날에는 운동을 하거나 새로운 것을 배우며 시간을 보냅니다." }
+    ];
+    var topicIdx = 0, activeField = "t1";
+
+    function renderTopic() {
+      var t = TOPICS[topicIdx];
+      Array.prototype.forEach.call($("chips").children, function (c, i) {
+        var on = i === topicIdx;
+        c.setAttribute("aria-checked", on ? "true" : "false");
+        c.style.background = on ? TOPICS[i].color : "";
+      });
+      $(activeField).placeholder = t.q;
+      $("exTitle").textContent = "예시 · " + t.name;
+      $("exText").textContent = t.ex;
+      $("exLen").textContent = textLength(t.ex) + "자 · 정확도 " + LEVEL[lengthLevel(textLength(t.ex))];
+    }
+    TOPICS.forEach(function (t, i) {
+      var c = el("button", "chip", t.name);
+      c.type = "button";
+      c.setAttribute("role", "radio");
+      c.addEventListener("click", function () { topicIdx = i; askPos = 0; renderTopic(); updateCoach($("t1").value); $(activeField).focus(); });
+      $("chips").appendChild(c);
+    });
+    renderTopic();
+    updateCoach("");
+
+    $("showEx").addEventListener("click", function () {
+      var open = $("example").hidden;
+      $("example").hidden = !open;
+      $("showEx").textContent = open ? "예시 글 숨기기" : "예시 글 보여주기";
+      $("showEx").setAttribute("aria-expanded", open ? "true" : "false");
+    });
+    $("copyEx").addEventListener("click", function () {
+      var text = $("exText").textContent;
+      function done(ok) { $("copyEx").textContent = ok ? "복사했습니다" : "직접 선택해 복사하세요"; setTimeout(function () { $("copyEx").textContent = "복사"; }, 1600); }
+      try {
+        if (navigator.clipboard && window.isSecureContext) { navigator.clipboard.writeText(text).then(function () { done(true); }, function () { done(false); }); return; }
+        var ta = document.createElement("textarea");
+        ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+        document.body.appendChild(ta); ta.select();
+        var ok = document.execCommand("copy");
+        document.body.removeChild(ta);
+        done(ok);
+      } catch (e) { done(false); }
+    });
+    function resetWarn() { warned = false; $("run").textContent = "검사하기"; }
+    $("again").addEventListener("click", function () { resetWarn(); show("write"); $("t1").focus(); });
+    $("home").addEventListener("click", function () {
+      $("t1").value = ""; answered = [0, 0, 0, 0]; askAxis = -1; askPos = 0;
+      updateLen(1); resetWarn(); $("msg").textContent = "";
+      show("start");
+    });
+
+    ORDER.forEach(function (l) { $("startTiles").appendChild(tile(l, true)); });
+
+  })();
+  </script>
+</body>
+</html>
